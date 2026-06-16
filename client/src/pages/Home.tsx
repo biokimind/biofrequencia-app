@@ -248,6 +248,11 @@ export default function Home() {
               />
             </div>
 
+            {/* Aviso sobre Frequências Inaudíveis */}
+            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-800 mb-6">
+              <p><strong>ℹ️ Nota sobre Frequências:</strong> O ouvido humano percebe frequências entre aproximadamente <strong>20 Hz e 20.000 Hz</strong>. Frequências abaixo de 20 Hz (infrasom) e acima de 20.000 Hz (ultrassom) podem ser inaudíveis, mas ainda podem ter efeitos biológicos. A idade reduz a percepção de frequências altas.</p>
+            </div>
+
             {/* Controls */}
             <div className="flex gap-3 mb-8">
               <Button
@@ -279,8 +284,14 @@ export default function Home() {
 
             {/* Safety Warning */}
             <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-xl text-sm text-yellow-800">
-              <p className="font-semibold mb-1">⚠️ Aviso de Segurança</p>
-              <p>Biofrequências são complementares. Consulte um profissional de saúde antes de usar. Não use enquanto dirige.</p>
+              <p className="font-semibold mb-2">⚠️ Aviso de Segurança</p>
+              <ul className="space-y-1 list-disc list-inside">
+                <li><strong>Não use</strong> se possui marcapasso ou implantes eletrônicos</li>
+                <li><strong>Não use</strong> se possui epilepsia ou sensibilidade a estímulos auditivos</li>
+                <li><strong>Não use</strong> durante a gravidez sem orientação médica</li>
+                <li><strong>Consulte</strong> um profissional de saúde antes de usar biofrequências</li>
+                <li><strong>Não use</strong> enquanto dirige ou opera máquinas</li>
+              </ul>
             </div>
           </Card>
         </div>
