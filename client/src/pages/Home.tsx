@@ -2,7 +2,11 @@ import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
-import { Play, Pause, RotateCcw, Volume2, Lock, Heart } from 'lucide-react';
+import { Play, Pause, RotateCcw, Volume2, Lock, Heart, Loader2 } from 'lucide-react';
+import { useAuth } from '@/_core/hooks/useAuth';
+import { getLoginUrl } from '@/const';
+import { trpc } from '@/lib/trpc';
+import { toast } from 'sonner';
 
 // Frequências Solfeggio
 const SOLFEGGIO_PRESETS = [
@@ -26,15 +30,38 @@ const RIFE_PRESETS = [
 ];
 
 export default function Home() {
+  const { user, isAuthenticated } = useAuth();
   const [frequency, setFrequency] = useState<number>(528);
   const [isPlaying, setIsPlaying] = useState(false);
   const [timeRemaining, setTimeRemaining] = useState(30);
-  const [isPremium] = useState(false); // Simular versão gratuita
   const [volume, setVolume] = useState(0.3);
+  const [isLoadingCheckout, setIsLoadingCheckout] = useState(false);
   const audioContextRef = useRef<AudioContext | null>(null);
   const oscillatorRef = useRef<OscillatorNode | null>(null);
   const gainNodeRef = useRef<GainNode | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Fetch premium status
+  const { data: subscriptionData, isLoading: isLoadingSubscription } = trpc.subscription.isPremium.useQuery(undefined, {
+    enabled: isAuthenticated,
+  });
+  const isPremium = subscriptionData?.isPremium || false;
+
+  // Mutation for creating checkout session
+  const createCheckoutMutation = trpc.subscription.createCheckoutSession.useMutation({
+    onSuccess: (data) => {
+      if (data.checkoutUrl) {
+        window.open(data.checkoutUrl, '_blank');
+        toast.success('Redirecionando para o Stripe...');
+      }
+      setIsLoadingCheckout(false);
+    },
+    onError: (error) => {
+      toast.error('Erro ao criar sessão de checkout');
+      console.error(error);
+      setIsLoadingCheckout(false);
+    },
+  });
 
   const maxDuration = isPremium ? 300 : 30; // 5 min premium, 30s gratuita
 
@@ -128,6 +155,24 @@ export default function Home() {
     if (isPlaying) {
       stopAudio();
       setTimeout(() => playAudio(), 100);
+    }
+  };
+
+  const handleUpgradePremium = async () => {
+    if (!isAuthenticated) {
+      window.location.href = getLoginUrl();
+      return;
+    }
+
+    setIsLoadingCheckout(true);
+    try {
+      await createCheckoutMutation.mutateAsync({
+        priceId: process.env.VITE_STRIPE_PREMIUM_MONTHLY_PRICE_ID || 'price_placeholder',
+        origin: window.location.origin,
+      });
+    } catch (error) {
+      console.error(error);
+      setIsLoadingCheckout(false);
     }
   };
 
@@ -390,8 +435,19 @@ export default function Home() {
             <p className="text-muted-foreground mb-6 text-lg">
               Crie frequências de até 5 minutos, acesse todas as frequências Rife e exporte áudio em alta qualidade.
             </p>
-            <Button className="bg-gradient-to-r from-primary to-secondary text-white rounded-xl px-8 py-6 text-lg font-semibold">
-              Atualizar para Premium
+            <Button 
+              onClick={handleUpgradePremium}
+              disabled={isLoadingCheckout || isLoadingSubscription}
+              className="bg-gradient-to-r from-primary to-secondary text-white rounded-xl px-8 py-6 text-lg font-semibold"
+            >
+              {isLoadingCheckout ? (
+                <>
+                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                  Processando...
+                </>
+              ) : (
+                'Atualizar para Premium - R$9,90/mês'
+              )}
             </Button>
           </div>
         </div>
