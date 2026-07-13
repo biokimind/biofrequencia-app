@@ -1,8 +1,8 @@
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
-import { Play, Pause, RotateCcw, Volume2, Lock, Heart, Loader2 } from 'lucide-react';
+import { Play, Pause, RotateCcw, Volume2, Lock, Heart, Loader2, Star, Trash2 } from 'lucide-react';
 import { useAuth } from '@/_core/hooks/useAuth';
 import { getLoginUrl } from '@/const';
 import { trpc } from '@/lib/trpc';
@@ -29,6 +29,12 @@ const RIFE_PRESETS = [
   { name: '432 Hz', value: 432, description: 'Harmonia' },
 ];
 
+interface Favorite {
+  id: string;
+  frequency: number;
+  name: string;
+}
+
 export default function Home() {
   const { user, isAuthenticated } = useAuth();
   const [frequency, setFrequency] = useState<number>(528);
@@ -37,6 +43,7 @@ export default function Home() {
   const [volume, setVolume] = useState(0.3);
   const [isLoadingCheckout, setIsLoadingCheckout] = useState(false);
   const [wavePhase, setWavePhase] = useState(0);
+  const [favorites, setFavorites] = useState<Favorite[]>([]);
   const audioContextRef = useRef<AudioContext | null>(null);
   const oscillatorRef = useRef<OscillatorNode | null>(null);
   const gainNodeRef = useRef<GainNode | null>(null);
@@ -66,6 +73,46 @@ export default function Home() {
   });
 
   const maxDuration = isPremium ? 300 : 30; // 5 min premium, 30s gratuita
+
+  // Load favorites from localStorage on mount
+  useEffect(() => {
+    const savedFavorites = localStorage.getItem('biofrequencia_favorites');
+    if (savedFavorites) {
+      try {
+        setFavorites(JSON.parse(savedFavorites));
+      } catch (error) {
+        console.error('Error loading favorites:', error);
+      }
+    }
+  }, []);
+
+  // Save favorites to localStorage whenever they change
+  useEffect(() => {
+    localStorage.setItem('biofrequencia_favorites', JSON.stringify(favorites));
+  }, [favorites]);
+
+  const addFavorite = () => {
+    const isFavorited = favorites.some(fav => fav.frequency === frequency);
+    if (isFavorited) {
+      toast.info('Esta frequência já está nos favoritos!');
+      return;
+    }
+
+    const newFavorite: Favorite = {
+      id: `fav_${Date.now()}`,
+      frequency,
+      name: `${frequency} Hz`,
+    };
+    setFavorites([...favorites, newFavorite]);
+    toast.success('Frequência adicionada aos favoritos! ⭐');
+  };
+
+  const removeFavorite = (id: string) => {
+    setFavorites(favorites.filter(fav => fav.id !== id));
+    toast.success('Removido dos favoritos');
+  };
+
+  const isFavorited = favorites.some(fav => fav.frequency === frequency);
 
   // Animate wave when playing
   useEffect(() => {
@@ -377,6 +424,18 @@ export default function Home() {
               >
                 <RotateCcw className="w-5 h-5" />
               </Button>
+              <Button
+                onClick={addFavorite}
+                variant={isFavorited ? "default" : "outline"}
+                size="lg"
+                className={`rounded-2xl py-6 border-2 ${
+                  isFavorited 
+                    ? 'bg-gradient-to-r from-primary to-secondary text-white' 
+                    : 'border-primary/20 hover:bg-primary/10'
+                }`}
+              >
+                <Star className={`w-5 h-5 ${isFavorited ? 'fill-current' : ''}`} />
+              </Button>
             </div>
 
             {/* Safety Warning */}
@@ -393,6 +452,48 @@ export default function Home() {
           </Card>
         </div>
       </div>
+
+      {/* Meus Favoritos Section */}
+      {favorites.length > 0 && (
+        <div className="bg-gradient-to-b from-background to-primary/5 py-12 px-4 md:px-8">
+          <div className="max-w-6xl mx-auto">
+            <div className="mb-8">
+              <h2 className="text-3xl font-bold text-primary mb-2 flex items-center gap-2">
+                <Star className="w-8 h-8 fill-primary" />
+                Meus Favoritos
+              </h2>
+              <p className="text-muted-foreground">Frequências que você salvou para acesso rápido</p>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+              {favorites.map((favorite) => (
+                <div key={favorite.id} className="relative group">
+                  <Button
+                    onClick={() => handlePresetClick(favorite.frequency)}
+                    variant={frequency === favorite.frequency ? 'default' : 'outline'}
+                    className={`w-full rounded-xl py-4 transition-all duration-200 h-auto flex flex-col items-center justify-center ${
+                      frequency === favorite.frequency
+                        ? 'bg-gradient-to-r from-primary to-secondary text-white shadow-lg'
+                        : 'border-primary/20 hover:border-primary/50'
+                    }`}
+                  >
+                    <div className="text-center">
+                      <div className="font-mono font-bold text-sm">{favorite.frequency} Hz</div>
+                    </div>
+                  </Button>
+                  <Button
+                    onClick={() => removeFavorite(favorite.id)}
+                    variant="ghost"
+                    size="sm"
+                    className="absolute -top-2 -right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-red-500 hover:bg-red-600 text-white rounded-full p-1 h-6 w-6"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Presets Section */}
       <div className="bg-gradient-to-b from-background to-secondary/5 py-16 px-4 md:px-8">
