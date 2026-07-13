@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
@@ -36,10 +36,12 @@ export default function Home() {
   const [timeRemaining, setTimeRemaining] = useState(30);
   const [volume, setVolume] = useState(0.3);
   const [isLoadingCheckout, setIsLoadingCheckout] = useState(false);
+  const [wavePhase, setWavePhase] = useState(0);
   const audioContextRef = useRef<AudioContext | null>(null);
   const oscillatorRef = useRef<OscillatorNode | null>(null);
   const gainNodeRef = useRef<GainNode | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const animationRef = useRef<number | null>(null);
 
   // Fetch premium status
   const { data: subscriptionData, isLoading: isLoadingSubscription } = trpc.subscription.isPremium.useQuery(undefined, {
@@ -65,9 +67,29 @@ export default function Home() {
 
   const maxDuration = isPremium ? 300 : 30; // 5 min premium, 30s gratuita
 
+  // Animate wave when playing
+  useEffect(() => {
+    if (!isPlaying) {
+      if (animationRef.current) cancelAnimationFrame(animationRef.current);
+      return;
+    }
+
+    const animate = () => {
+      setWavePhase((prev) => (prev + 2) % 360);
+      animationRef.current = requestAnimationFrame(animate);
+    };
+
+    animationRef.current = requestAnimationFrame(animate);
+
+    return () => {
+      if (animationRef.current) cancelAnimationFrame(animationRef.current);
+    };
+  }, [isPlaying]);
+
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
+      if (animationRef.current) cancelAnimationFrame(animationRef.current);
       stopAudio();
     };
   }, []);
@@ -167,7 +189,7 @@ export default function Home() {
     setIsLoadingCheckout(true);
     try {
       await createCheckoutMutation.mutateAsync({
-        priceId: process.env.VITE_STRIPE_PREMIUM_MONTHLY_PRICE_ID || 'price_placeholder',
+        priceId: import.meta.env.VITE_STRIPE_PREMIUM_MONTHLY_PRICE_ID || 'price_placeholder',
         origin: window.location.origin,
       });
     } catch (error) {
@@ -238,10 +260,10 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Waveform Visualizer */}
+            {/* Waveform Visualizer - Animated */}
             <div className="mb-8 p-6 bg-gradient-to-b from-primary/10 to-secondary/10 rounded-2xl border border-primary/20 overflow-hidden">
               <svg
-                className="w-full h-24"
+                className="w-full h-24 transition-all duration-200"
                 viewBox="0 0 400 100"
                 preserveAspectRatio="none"
               >
@@ -250,13 +272,43 @@ export default function Home() {
                     <stop offset="0%" stopColor="rgb(139, 127, 216)" stopOpacity="0.8" />
                     <stop offset="100%" stopColor="rgb(78, 205, 196)" stopOpacity="0.3" />
                   </linearGradient>
+                  <filter id="glow">
+                    <feGaussianBlur stdDeviation="2" result="coloredBlur" />
+                    <feMerge>
+                      <feMergeNode in="coloredBlur" />
+                      <feMergeNode in="SourceGraphic" />
+                    </feMerge>
+                  </filter>
                 </defs>
-                {/* Animated wave */}
+                
+                {/* Animated wave - multiple layers for depth */}
+                {isPlaying && (
+                  <>
+                    <g opacity="0.5">
+                      <path
+                        d={generateAnimatedWavePath(frequency, wavePhase + 30)}
+                        fill="none"
+                        stroke="rgb(78, 205, 196)"
+                        strokeWidth="1"
+                      />
+                    </g>
+                    <g opacity="0.7">
+                      <path
+                        d={generateAnimatedWavePath(frequency, wavePhase + 15)}
+                        fill="none"
+                        stroke="rgb(139, 127, 216)"
+                        strokeWidth="1.5"
+                      />
+                    </g>
+                  </>
+                )}
+                
                 <path
-                  d={generateWavePath(isPlaying ? frequency : 0)}
-                  fill="url(#waveGradient)"
+                  d={isPlaying ? generateAnimatedWavePath(frequency, wavePhase) : generateWavePath(frequency)}
+                  fill={isPlaying ? "url(#waveGradient)" : "none"}
                   stroke="rgb(139, 127, 216)"
                   strokeWidth="2"
+                  filter={isPlaying ? "url(#glow)" : "none"}
                 />
               </svg>
             </div>
@@ -473,7 +525,7 @@ export default function Home() {
   );
 }
 
-// Função para gerar o caminho da onda
+// Função para gerar o caminho da onda estática
 function generateWavePath(frequency: number): string {
   const points = [];
   const amplitude = 40;
@@ -487,6 +539,30 @@ function generateWavePath(frequency: number): string {
   for (let x = 0; x <= width; x += 1) {
     const normalizedX = (x / width) * cycles * Math.PI * 2;
     const y = centerY + Math.sin(normalizedX) * amplitude;
+    points.push(`${x},${y}`);
+  }
+
+  return `M ${points.join(' L ')}`;
+}
+
+// Função para gerar o caminho da onda animada
+function generateAnimatedWavePath(frequency: number, phase: number): string {
+  const points = [];
+  const amplitude = 40;
+  const width = 400;
+  const height = 100;
+  const centerY = height / 2;
+
+  // Ajustar o número de ciclos baseado na frequência
+  const cycles = Math.max(1, Math.min(5, frequency / 100));
+  
+  // Converter fase para radianos
+  const phaseRad = (phase * Math.PI) / 180;
+
+  for (let x = 0; x <= width; x += 1) {
+    const normalizedX = (x / width) * cycles * Math.PI * 2;
+    // Adicionar fase para criar movimento
+    const y = centerY + Math.sin(normalizedX + phaseRad) * amplitude;
     points.push(`${x},${y}`);
   }
 
